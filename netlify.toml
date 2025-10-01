@@ -3,4 +3,7 @@
   publish = "."
 
 [build.environment]
+  PYTHON_VERSION = "3.9"
   NODE_VERSION = "18"
+  MISE_USE_LEGACY = "1"
+  MISE_LEGACY_VERSION_FILE = "1"

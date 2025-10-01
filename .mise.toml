@@ -1,0 +1,7 @@
+# Deshabilitar mise completamente
+# Netlify usará runtime.txt en su lugar
+[tools]
+# No especificar Python aquí
+
+[settings]
+mise.disable = true

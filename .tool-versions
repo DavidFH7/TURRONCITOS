@@ -1,0 +1,3 @@
+# Este archivo evita que mise se active automáticamente
+# Netlify usará runtime.txt en su lugar
+# No especificar Python aquí para evitar conflictos
