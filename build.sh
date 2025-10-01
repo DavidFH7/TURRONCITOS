@@ -1,15 +1,19 @@
 #!/bin/bash
 
+# Configurar Python sin mise
+export PYTHON_VERSION=3.9
+export MISE_USE_LEGACY=1
+
+# Instalar pip si no existe
+python -m ensurepip --upgrade
+
+# Actualizar pip
+python -m pip install --upgrade pip
+
 # Instalar dependencias
 pip install -r requirements.txt
 
 # Crear directorio instance si no existe
 mkdir -p instance
 
-# Inicializar la base de datos
-python -c "
-from app import app, db, cargar_datos_existentes
-with app.app_context():
-    cargar_datos_existentes()
-    print('Base de datos inicializada correctamente')
-"
+echo "Build completado exitosamente"

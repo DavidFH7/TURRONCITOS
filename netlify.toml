@@ -1,6 +1,13 @@
 [build]
-  command = "pip install -r requirements.txt"
+  command = "chmod +x build.sh && ./build.sh"
   publish = "."
 
 [build.environment]
   PYTHON_VERSION = "3.9"
+  NODE_VERSION = "18"
+  MISE_USE_LEGACY = "1"
+  MISE_LEGACY_VERSION_FILE = "1"
+
+[dev]
+  command = "python app.py"
+  port = 5000

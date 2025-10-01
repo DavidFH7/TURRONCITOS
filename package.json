@@ -1,0 +1,13 @@
+{
+  "name": "sistema-ventas-flask",
+  "version": "1.0.0",
+  "description": "Sistema de Ventas con Python Flask",
+  "scripts": {
+    "build": "echo 'Build completed'",
+    "start": "python app.py"
+  },
+  "engines": {
+    "node": "18.x",
+    "python": "3.9"
+  }
+}
