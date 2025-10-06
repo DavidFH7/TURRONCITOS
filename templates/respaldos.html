@@ -8,6 +8,9 @@
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h2><i class="fas fa-database me-2"></i>Gestión de Respaldo</h2>
             <div>
+                <button type="button" class="btn btn-info me-2" data-bs-toggle="modal" data-bs-target="#importarModal">
+                    <i class="fas fa-upload me-2"></i>Importar Respaldo
+                </button>
                 <form action="{{ url_for('eliminar_todos_respaldos') }}" method="post" class="d-inline" onsubmit="return confirm('¿Seguro que deseas eliminar TODOS los respaldos? Esta acción no se puede deshacer.');">
                     <button type="submit" class="btn btn-danger me-2">
                         <i class="fas fa-trash-alt me-2"></i>Eliminar Todos
@@ -54,6 +57,7 @@
                         <thead class="table-dark">
                             <tr>
                                 <th>Nombre del Archivo</th>
+                                <th>Carpeta</th>
                                 <th>Fecha de Creación</th>
                                 <th>Tamaño</th>
                                 <th>Acciones</th>
@@ -65,6 +69,11 @@
                                 <td>
                                     <i class="fas fa-database text-primary me-2"></i>
                                     <strong>{{ respaldo.nombre }}</strong>
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary">
+                                        <i class="fas fa-folder me-1"></i>{{ respaldo.carpeta }}
+                                    </span>
                                 </td>
                                 <td>{{ respaldo.fecha_formateada }}</td>
                                 <td>
@@ -78,16 +87,16 @@
                                 </td>
                                 <td>
                                     <div class="btn-group" role="group">
-                                        <a href="{{ url_for('restaurar_respaldo', filename=respaldo.nombre) }}" 
+                                        <a href="{{ url_for('restaurar_respaldo', filename=respaldo.ruta_relativa) }}" 
                                            class="btn btn-warning btn-sm" 
-                                           onclick="return confirm('¿Estás seguro de que quieres restaurar desde este respaldo? Se creará un respaldo de la base de datos actual antes de restaurar.')">
+                                           onclick="return confirm('¿Estás seguro de que quieres restaurar desde este respaldo?\\n\\nEsta acción reemplazará la base de datos actual con los datos del respaldo seleccionado.\\n\\nDespués de restaurar, serás redirigido al dashboard para ver los datos restaurados.')">
                                             <i class="fas fa-undo me-1"></i>Restaurar
                                         </a>
-                                        <a href="{{ url_for('descargar_respaldo', filename=respaldo.nombre) }}" 
+                                        <a href="{{ url_for('descargar_respaldo', filename=respaldo.ruta_relativa) }}" 
                                            class="btn btn-info btn-sm">
                                             <i class="fas fa-download me-1"></i>Descargar
                                         </a>
-                                        <a href="{{ url_for('eliminar_respaldo', filename=respaldo.nombre) }}" 
+                                        <a href="{{ url_for('eliminar_respaldo', filename=respaldo.ruta_relativa) }}" 
                                            class="btn btn-danger btn-sm" 
                                            onclick="return confirm('¿Estás seguro de que quieres eliminar este respaldo?')">
                                             <i class="fas fa-trash me-1"></i>Eliminar
@@ -172,7 +181,7 @@
                         <p class="text-muted">Haz clic en "Crear Respaldo" para hacer una copia manual de tu base de datos actual.</p>
                         
                         <h6><i class="fas fa-undo text-warning me-2"></i>Restaurar</h6>
-                        <p class="text-muted">Selecciona un respaldo y haz clic en "Restaurar" para volver a ese estado. Se creará un respaldo de seguridad antes de restaurar.</p>
+                        <p class="text-muted">Selecciona un respaldo y haz clic en "Restaurar" para volver a ese estado. Esta acción reemplazará la base de datos actual. <strong>Después de restaurar, serás redirigido al dashboard para ver los datos restaurados.</strong></p>
                     </div>
                     <div class="col-md-6">
                         <h6><i class="fas fa-download text-info me-2"></i>Descargar</h6>
@@ -183,6 +192,57 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para Importar Respaldo -->
+<div class="modal fade" id="importarModal" tabindex="-1" aria-labelledby="importarModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="importarModalLabel">
+                    <i class="fas fa-upload me-2"></i>Importar Respaldo
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('importar_respaldo') }}" method="post" enctype="multipart/form-data">
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Importante:</strong> Se creará un respaldo de seguridad de la base de datos actual antes de importar el nuevo respaldo.
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="backup_file" class="form-label">
+                            <i class="fas fa-file-database me-2"></i>Seleccionar Archivo de Respaldo
+                        </label>
+                        <input type="file" class="form-control" id="backup_file" name="backup_file" accept=".db" required>
+                        <div class="form-text">Solo se permiten archivos de base de datos (.db)</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="backup_name" class="form-label">
+                            <i class="fas fa-tag me-2"></i>Nombre Personalizado (Opcional)
+                        </label>
+                        <input type="text" class="form-control" id="backup_name" name="backup_name" placeholder="Dejar vacío para usar el nombre original">
+                        <div class="form-text">Si no se especifica, se usará el nombre del archivo original</div>
+                    </div>
+                    
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Advertencia:</strong> Esta acción reemplazará la base de datos actual. Asegúrate de tener un respaldo de seguridad.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-2"></i>Cancelar
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-upload me-2"></i>Importar Respaldo
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

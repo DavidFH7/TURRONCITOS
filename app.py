@@ -1119,24 +1119,31 @@ def respaldos():
         import os
         from datetime import datetime
         
-        backup_dir = 'backups'
+        backup_base_dir = 'backups'
         respaldos = []
         
-        if os.path.exists(backup_dir):
-            for filename in os.listdir(backup_dir):
-                if filename.endswith('.db'):
-                    file_path = os.path.join(backup_dir, filename)
-                    file_stats = os.stat(file_path)
-                    file_size = file_stats.st_size
-                    file_date = datetime.fromtimestamp(file_stats.st_mtime)
-                    
-                    respaldos.append({
-                        'nombre': filename,
-                        'ruta': file_path,
-                        'tamaño': file_size,
-                        'fecha': file_date,
-                        'fecha_formateada': file_date.strftime('%d/%m/%Y %H:%M:%S')
-                    })
+        if os.path.exists(backup_base_dir):
+            # Buscar en todas las subcarpetas y en la carpeta principal
+            for root, dirs, files in os.walk(backup_base_dir):
+                for filename in files:
+                    if filename.endswith('.db'):
+                        file_path = os.path.join(root, filename)
+                        file_stats = os.stat(file_path)
+                        file_size = file_stats.st_size
+                        file_date = datetime.fromtimestamp(file_stats.st_mtime)
+                        
+                        # Obtener la ruta relativa para mostrar
+                        relative_path = os.path.relpath(file_path, backup_base_dir)
+                        
+                        respaldos.append({
+                            'nombre': filename,
+                            'ruta': file_path,
+                            'ruta_relativa': relative_path,
+                            'tamaño': file_size,
+                            'fecha': file_date,
+                            'fecha_formateada': file_date.strftime('%d/%m/%Y %H:%M:%S'),
+                            'carpeta': os.path.dirname(relative_path) if os.path.dirname(relative_path) else 'Principal'
+                        })
             
             # Ordenar por fecha (más recientes primero)
             respaldos.sort(key=lambda x: x['fecha'], reverse=True)
@@ -1161,7 +1168,7 @@ def crear_respaldo_manual():
     
     return redirect(url_for('respaldos'))
 
-@app.route('/respaldos/restaurar/<filename>')
+@app.route('/respaldos/restaurar/<path:filename>')
 @login_required
 def restaurar_respaldo(filename):
     """Restaurar desde un respaldo"""
@@ -1174,18 +1181,21 @@ def restaurar_respaldo(filename):
             flash('El respaldo no existe', 'error')
             return redirect(url_for('respaldos'))
         
-        # Restaurar el respaldo
-        db_path = 'instance/sistema_ventas.db'
+        # Restaurar el respaldo directamente
+        db_path = 'sistema_ventas.db'
         shutil.copy2(backup_path, db_path)
         
-        flash(f'Base de datos restaurada desde {filename}', 'success')
+        # Mensajes de confirmación
+        flash(f'✅ Base de datos restaurada exitosamente desde: {os.path.basename(filename)}', 'success')
+        flash('🔄 Los datos han sido actualizados. Ahora puedes ver la información restaurada en el dashboard.', 'info')
+        
         return redirect(url_for('dashboard'))
         
     except Exception as e:
         flash(f'Error al restaurar respaldo: {str(e)}', 'error')
         return redirect(url_for('respaldos'))
 
-@app.route('/respaldos/descargar/<filename>')
+@app.route('/respaldos/descargar/<path:filename>')
 @login_required
 def descargar_respaldo(filename):
     """Descargar un respaldo"""
@@ -1197,13 +1207,15 @@ def descargar_respaldo(filename):
             flash('El respaldo no existe', 'error')
             return redirect(url_for('respaldos'))
         
-        return send_file(backup_path, as_attachment=True, download_name=filename)
+        # Obtener solo el nombre del archivo para la descarga
+        download_name = os.path.basename(filename)
+        return send_file(backup_path, as_attachment=True, download_name=download_name)
         
     except Exception as e:
         flash(f'Error al descargar respaldo: {str(e)}', 'error')
         return redirect(url_for('respaldos'))
 
-@app.route('/respaldos/eliminar/<filename>')
+@app.route('/respaldos/eliminar/<path:filename>')
 @login_required
 def eliminar_respaldo(filename):
     """Eliminar un respaldo"""
@@ -1211,11 +1223,91 @@ def eliminar_respaldo(filename):
         backup_path = os.path.join('backups', filename)
         if os.path.exists(backup_path):
             os.remove(backup_path)
-            flash(f'Respaldo {filename} eliminado exitosamente', 'success')
+            flash(f'Respaldo {os.path.basename(filename)} eliminado exitosamente', 'success')
         else:
             flash('El respaldo no existe', 'error')
     except Exception as e:
         flash(f'Error al eliminar respaldo: {str(e)}', 'error')
+    
+    return redirect(url_for('respaldos'))
+
+@app.route('/respaldos/importar', methods=['POST'])
+@login_required
+def importar_respaldo():
+    """Importar un respaldo desde un archivo"""
+    try:
+        from werkzeug.utils import secure_filename
+        import shutil
+        from datetime import datetime
+        
+        # Verificar que se subió un archivo
+        if 'backup_file' not in request.files:
+            flash('No se seleccionó ningún archivo', 'error')
+            return redirect(url_for('respaldos'))
+        
+        file = request.files['backup_file']
+        if file.filename == '':
+            flash('No se seleccionó ningún archivo', 'error')
+            return redirect(url_for('respaldos'))
+        
+        # Verificar extensión del archivo
+        if not file.filename.lower().endswith('.db'):
+            flash('Solo se permiten archivos de base de datos (.db)', 'error')
+            return redirect(url_for('respaldos'))
+        
+        # Verificar tamaño del archivo (máximo 50MB)
+        file.seek(0, 2)  # Ir al final del archivo
+        file_size = file.tell()
+        file.seek(0)  # Volver al inicio
+        
+        if file_size > 50 * 1024 * 1024:  # 50MB
+            flash('El archivo es demasiado grande. Tamaño máximo: 50MB', 'error')
+            return redirect(url_for('respaldos'))
+        
+        # Crear respaldo de seguridad de la base de datos actual
+        backup_security = crear_respaldo_automatico()
+        if backup_security:
+            flash('Se creó un respaldo de seguridad antes de la importación', 'info')
+        
+        # Obtener nombre personalizado si se proporcionó
+        backup_name = request.form.get('backup_name', '').strip()
+        if not backup_name:
+            backup_name = secure_filename(file.filename)
+        
+        # Crear estructura de directorios organizada para respaldos importados
+        backup_base_dir = 'backups'
+        current_date = datetime.now().strftime('%Y-%m')
+        import_dir = os.path.join(backup_base_dir, f'{current_date}_imported')
+        
+        # Crear directorios si no existen
+        if not os.path.exists(backup_base_dir):
+            os.makedirs(backup_base_dir)
+        if not os.path.exists(import_dir):
+            os.makedirs(import_dir)
+        
+        # Generar nombre único para el respaldo importado
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        if not backup_name.endswith('.db'):
+            backup_name += '.db'
+        
+        # Asegurar que el nombre sea único
+        base_name = backup_name.replace('.db', '')
+        final_name = f"{base_name}_imported_{timestamp}.db"
+        backup_path = os.path.join(import_dir, final_name)
+        
+        # Guardar el archivo importado
+        file.save(backup_path)
+        
+        # Opcional: Restaurar automáticamente el respaldo importado
+        # (Comentado por seguridad - el usuario debe hacerlo manualmente)
+        # db_path = 'sistema_ventas.db'
+        # shutil.copy2(backup_path, db_path)
+        
+        flash(f'Respaldo importado exitosamente: {final_name}', 'success')
+        flash('Nota: El respaldo se guardó en la carpeta de respaldos. Puedes restaurarlo cuando lo desees.', 'info')
+        
+    except Exception as e:
+        flash(f'Error al importar respaldo: {str(e)}', 'error')
     
     return redirect(url_for('respaldos'))
 
@@ -1232,8 +1324,12 @@ def eliminar_todos_respaldos():
             flash('No hay respaldos para eliminar', 'warning')
             return redirect(url_for('respaldos'))
         
-        # Obtener todos los archivos .db en el directorio backups
-        backup_files = glob.glob(os.path.join(backup_dir, '*.db'))
+        # Obtener todos los archivos .db en el directorio backups y subdirectorios
+        backup_files = []
+        for root, dirs, files in os.walk(backup_dir):
+            for file in files:
+                if file.endswith('.db'):
+                    backup_files.append(os.path.join(root, file))
         
         if not backup_files:
             flash('No hay respaldos para eliminar', 'warning')
@@ -1284,8 +1380,14 @@ def crear_respaldo_automatico():
         import os
         from datetime import datetime
         
-        # Crear directorio de respaldos si no existe
-        backup_dir = 'backups'
+        # Crear estructura de directorios organizada
+        backup_base_dir = 'backups'
+        current_date = datetime.now().strftime('%Y-%m')
+        backup_dir = os.path.join(backup_base_dir, current_date)
+        
+        # Crear directorios si no existen
+        if not os.path.exists(backup_base_dir):
+            os.makedirs(backup_base_dir)
         if not os.path.exists(backup_dir):
             os.makedirs(backup_dir)
         
@@ -1295,7 +1397,7 @@ def crear_respaldo_automatico():
         backup_path = os.path.join(backup_dir, backup_filename)
         
         # Copiar la base de datos actual
-        db_path = 'instance/sistema_ventas.db'
+        db_path = 'sistema_ventas.db'
         if os.path.exists(db_path):
             copy2(db_path, backup_path)
             print(f"Respaldo creado: {backup_path}")
